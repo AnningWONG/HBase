@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig authType="PASSWORD" host="ali_hadoop102" id="cfdc0e82-a513-472a-9e71-3932de11dacb" port="22" nameFormat="DESCRIPTIVE" username="atguigu" useOpenSSHConfig="true" />
+    </configs>
+  </component>
+</project>
