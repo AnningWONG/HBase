@@ -24,6 +24,7 @@ import java.util.List;
  */
 public class HBaseUtils {
 
+
     // 获取连接
     private static Connection connection;
 
@@ -37,13 +38,18 @@ public class HBaseUtils {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        // 获取异步连接
+        /*
+        CompletableFuture<AsyncConnection> asyncConnection = ConnectionFactory.createAsyncConnection(conf);
+        asyncConnection.get().close();;
+        */
     }
-
+    // 获取连接的方法
     public static Connection getConnection() {
         return connection;
     }
 
-    // 关闭连接
+    // 关闭连接的方法
     public static void closeConnection(Connection connection) {
         if (connection != null && !connection.isClosed()) {
             try {
@@ -55,7 +61,7 @@ public class HBaseUtils {
     }
 
     // TODO: DDL
-    // create 'namespace:table','cf...'
+    // 创建表 create 'namespace:table','cf...'
     public static void createTable(Connection connection, String namespace, String table, String... cfs) throws Exception {
         if (connection == null) {
             System.out.println("连接对象不能为空");
@@ -79,10 +85,11 @@ public class HBaseUtils {
             return;
         }
         // 建表
-        // 建造者获得表描述
+        // 建造者模式获得表描述
         TableDescriptorBuilder tableDescriptorBuilder = TableDescriptorBuilder.newBuilder(tn);
         // 设置列族信息
         for (String cf : cfs) {
+            // 建造者模式获得列族描述
             ColumnFamilyDescriptorBuilder columnFamilyDescriptorBuilder =
                     ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes(cf));
             ColumnFamilyDescriptor columnFamilyDescriptor =
@@ -90,40 +97,66 @@ public class HBaseUtils {
             tableDescriptorBuilder.setColumnFamily(columnFamilyDescriptor);
         }
         TableDescriptor tableDescriptor = tableDescriptorBuilder.build();
+        // 根据表描述创建表
         admin.createTable(tableDescriptor);
         System.out.println((namespace == null ? "default" : namespace) + ":" + table + "创建成功");
 
         admin.close();
     }
 
-    public static void main(String[] args) throws Exception {
-        Connection connection = getConnection();
-        // 创建表
-        System.out.println("同步连接：" + connection);
-        // createTable(connection,null, "t1", "f1", "f2", "f3");
-        putData(connection, null, "stu", "1003", "f1", "name", "Tom");
-        closeConnection(connection);
-    }
 
-    // DML新增
-    public static void putData(Connection connection, String namespace, String table, String rowKey, String cf, String cl, String v) throws IOException {
+
+    // DML put
+    public static void putData(Connection connection, String namespace, String tableName, String rowKey, String cf, String cl, String v) throws IOException {
         // 判空
+        if (connection == null) {
+            System.out.println("连接对象不能为空");
+            return;
+        }
+        if (tableName == null || tableName.trim().isEmpty()) {
+            System.out.println("表名不能为空");
+            return;
+        }
+        if (cf == null || cf.trim().isEmpty()) {
+            System.out.println("列族不能为空");
+            return;
+        }
+        if (cl == null || cl.trim().isEmpty()) {
+            System.out.println("列不能为空");
+            return;
+        }
+        if (v == null || v.trim().isEmpty()) {
+            System.out.println("值不能为空");
+            return;
+        }
         // 获取Table对象
-        TableName tn = TableName.valueOf(namespace, table);
-        Table table1 = connection.getTable(tn);
+        TableName tn = TableName.valueOf(namespace, tableName);
+        Table table = connection.getTable(tn);
+        // Put对象
         Put put = new Put(Bytes.toBytes(rowKey));
         // 添加列
         put.addColumn(Bytes.toBytes(cf), Bytes.toBytes(cl), Bytes.toBytes(v));
-        table1.put(put);
-        table1.close();
+        // put操作
+        table.put(put);
+        table.close();
     }
-
-    // DML删除
-    public static void deleteData(Connection connection, String namespace, String table, String rowKey, String cf, String cl) throws IOException {
-        // 判空
+    /*
+    hbase:007:0> scan 'stu' ,{RAW=>true,VERSIONS=>5}
+    ROW                                      COLUMN+CELL
+     1001                                    column=f1:name, timestamp=2024-03-27T18:59:59.872, value=Tom
+     1003                                    column=f1:name, timestamp=2024-03-28T13:51:47.139, value=Tom
+     1004                                    column=f1:age, timestamp=2024-03-28T13:58:23.435, value=15
+     1004                                    column=f1:age, timestamp=2024-03-28T13:56:35.912, value=12
+     1004                                    column=f1:name, timestamp=2024-03-28T13:56:18.425, value=Jerry
+    3 row(s)
+    Took 0.0147 seconds
+     */
+    // DML delete
+    public static void deleteData(Connection connection, String namespace, String tableName, String rowKey, String cf, String cl) throws IOException {
+        // 判空，略
         // 获取Table对象
-        TableName tn = TableName.valueOf(namespace, table);
-        Table table2 = connection.getTable(tn);
+        TableName tn = TableName.valueOf(namespace, tableName);
+        Table table = connection.getTable(tn);
 
         Delete delete = new Delete(Bytes.toBytes(rowKey));
         // 删除指定版本的数据，底层Delete
@@ -136,27 +169,29 @@ public class HBaseUtils {
         // 什么都不用写
 
         // 指定列族删除
-        delete.addFamily(Bytes.toBytes("cf"));
+        delete.addFamily(Bytes.toBytes(cf));
 
 
-        table2.delete(delete);
-        table2.close();
+        table.delete(delete);
+        table.close();
 
     }
 
 
-    // DML查询
-    public static void getData(Connection connection, String namespace, String table, String rowKey) throws IOException {
+    // DML get
+    public static void getData(Connection connection, String namespace, String tableName, String rowKey) throws IOException {
         // 判空
         // 获取Table对象
-        TableName tn = TableName.valueOf(namespace, table);
-        Table table3 = connection.getTable(tn);
+        TableName tn = TableName.valueOf(namespace, tableName);
+        Table table = connection.getTable(tn);
 
         Get get = new Get(Bytes.toBytes(rowKey));
 
-        Result result = table3.get(get);
+        Result result = table.get(get);
         // 提取所有Cell
+        // 获取Cell集合
         List<Cell> cellList = result.listCells();
+        // 获取Cell数组
         // Cell[] cellArray = result.rawCells();
         for (Cell cell : cellList) {
             System.out.println(Bytes.toString(CellUtil.cloneRow(cell)) + ":"
@@ -164,18 +199,18 @@ public class HBaseUtils {
                     + Bytes.toString(CellUtil.cloneQualifier(cell)) + ":"
                     + Bytes.toString(CellUtil.cloneValue(cell)));
         }
-        table3.close();
+        table.close();
     }
 
-    // DML查询
-    public static void scanData(Connection connection, String namespace, String table, String startRow, String stopRow) throws IOException {
+    // DML scan
+    public static void scanData(Connection connection, String namespace, String tableName, String startRow, String stopRow) throws IOException {
         // 判空
         // 获取Table对象
-        TableName tn = TableName.valueOf(namespace, table);
-        Table table4 = connection.getTable(tn);
+        TableName tn = TableName.valueOf(namespace, tableName);
+        Table table = connection.getTable(tn);
         Scan scan = new Scan();
         scan.withStartRow(Bytes.toBytes(startRow)).withStopRow(Bytes.toBytes(stopRow));
-        ResultScanner resultScanner = table4.getScanner(scan);
+        ResultScanner resultScanner = table.getScanner(scan);
 
         for (Result result : resultScanner) {
             List<Cell> cellList = result.listCells();
@@ -188,29 +223,29 @@ public class HBaseUtils {
             System.out.println("--------------------");
         }
 
-        table4.close();
+        table.close();
     }
     // DML: Scan with filter，会导致全表扫描；HBase推荐用行键
-    public static void scanDataWithFilter(Connection connection, String namespace, String table) throws IOException {
+    public static void scanDataWithFilter(Connection connection, String namespace, String tableName) throws IOException {
         // 判空
         // 获取Table对象
-        TableName tn = TableName.valueOf(namespace, table);
-        Table table4 = connection.getTable(tn);
+        TableName tn = TableName.valueOf(namespace, tableName);
+        Table table = connection.getTable(tn);
         Scan scan = new Scan();
 
         // 过滤
-        // name = 'zhangsan'
+        // name = 'Jerry'
         SingleColumnValueFilter nameFilter = new SingleColumnValueFilter
-                (Bytes.toBytes("f1"), Bytes.toBytes("name"), CompareOperator.EQUAL, Bytes.toBytes("zhangsan"));
+                (Bytes.toBytes("f1"), Bytes.toBytes("name"), CompareOperator.EQUAL, Bytes.toBytes("Jerry"));
         // 对于没有这个列的数据，有两种策略，保留和跳过，默认是保留
         // 跳过
         nameFilter.setFilterIfMissing(true);
         // scan.setFilter(nameFilter);
 
 
-        // age >= 30
+        // age >= 12
         SingleColumnValueFilter ageFilter = new SingleColumnValueFilter
-                (Bytes.toBytes("f1"), Bytes.toBytes("age"), CompareOperator.GREATER_OR_EQUAL, Bytes.toBytes("30"));
+                (Bytes.toBytes("f1"), Bytes.toBytes("age"), CompareOperator.GREATER_OR_EQUAL, Bytes.toBytes("12"));
         ageFilter.setFilterIfMissing(true);
         // scan.setFilter(ageFilter);
 
@@ -220,7 +255,7 @@ public class HBaseUtils {
         scan.setFilter(filterList);
 
 
-        ResultScanner resultScanner = table4.getScanner(scan);
+        ResultScanner resultScanner = table.getScanner(scan);
 
         for (Result result : resultScanner) {
             List<Cell> cellList = result.listCells();
@@ -233,7 +268,24 @@ public class HBaseUtils {
             System.out.println("--------------------");
         }
 
-        table4.close();
+        table.close();
+    }
+    public static void main(String[] args) throws Exception {
+        Connection connection = getConnection();
+        // DDL 创建表
+        // createTable(connection,null, "t1", "f1", "f2", "f3");
+        // DML put
+        // putData(connection, null, "stu", "1003", "f1", "name", "Tom");
+        // DML get
+        // getData(connection,null,"stu","1004");
+        // DML scan
+        // scanData(connection,null, "stu","0","1111");
+        // DML scan with filter
+        // scanDataWithFilter(connection, null, "stu");
+        // DML delete
+        // deleteData(connection,null,"stu","1004","f1","name");
+
+        closeConnection(connection);
     }
 
 }
